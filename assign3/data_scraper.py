@@ -2,7 +2,6 @@
 # labels it as misinformation so the general public does NOT get misinformed about invalid claims with no scientific basis
 
 '''
-STEP 1
 scrape off of bluesky posts that are about being trans/trans identity through the keywords. 
 
 we will use this to test our label (after manually filtering for some edge cases and being strategic with the posts scraped)
@@ -69,16 +68,4 @@ filtered_posts = [
 df = pd.DataFrame(filtered_posts)
 df.to_csv("raw_scraped.csv", index=False)
 print(f"Saved {len(filtered_posts)} posts to raw_scraped.csv")
-
-'''
-STEP 2: create and use the labeler
-
-Label: "Potential Misinformation"
-
-Criteria: Posts that contain pseudo-scientific claims about transgender people.
-
-
-'''
-
-# temp test of persepctive api
 
