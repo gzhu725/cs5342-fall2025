@@ -33,21 +33,54 @@ def is_trans_related(text):
     text_lower = str(text).lower()
     return int(any(keyword in text_lower for keyword in KEYWORDS))
 
-# 2. 
+
+# 2. Perspective API - get toxicity score 
+def get_toxicity_score(text, retries=3):
+    """Call Perspective API and return toxicity score (0-1)"""
+    url = "https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze"
+    data = {
+        "comment": {"text": str(text)},
+        "languages": ["en"],
+        "requestedAttributes": {"TOXICITY": {}}
+    }
+    params = {"key": PERSPECTIVE_API_KEY}
+
+    for attempt in range(retries):
+        try:
+            response = requests.post(url, json=data, params=params)
+            response.raise_for_status()
+            return response.json()["attributeScores"]["TOXICITY"]["summaryScore"]["value"]
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 429:
+                print("Rate limit hit. Retrying...")
+                time.sleep(1 + attempt)  # exponential backoff
+            else:
+                print(f"Error: {e}")
+                break
+    return None
 
 
 # OUTPUT TO NEW LABELED DATA FILE 
 df = pd.read_csv("../test-data/data.csv")
 
-labels = []
+relevancies = []
+toxicity_scores = []
 for idx, row in df.iterrows():
-    label = is_trans_related(row["Original Text"])
-    labels.append(label)
+    # run checks
+    relevant = is_trans_related(row["Original Text"])
+    # score = get_toxicity_score(row["Original Text"]) DO NOT RUN THIS IF YOU ALREADY HAVE LABELED DATA
+
+    # append to list 
+    toxicity_scores.append(score)
+    relevancies.append(relevant)
     time.sleep(0.1)  # avoid hitting API limits
+
     if idx % 10 == 0:
         print(f"Labeled {idx+1}/{len(df)} posts")
 
-df["Label"] = labels  # add new column for binary label
+df["Is Related"] = relevancies
+df["Toxicity"] = toxicity_scores
+
 
 # Save new CSV
 output_file = "labeled_data.csv"
