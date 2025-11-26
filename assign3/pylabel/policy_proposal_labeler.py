@@ -1,23 +1,17 @@
-'''
-Create and use the labeler
-
-Label: "Potential Misinformation"
-
-Criteria: Posts that contain pseudo-scientific claims about transgender people.
-
-'''
-
+# Label: Potential misnformation
+# Category/Relevancy: Related to trans issues/trans rights/trans people, etc.
 import os
 import time
+import json
+import re
+import requests 
+
 import pandas as pd
 from atproto import Client
 from dotenv import load_dotenv
-import requests
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 from groq import Groq
-import json
-import re
 
 load_dotenv()
 
@@ -30,6 +24,8 @@ KEYWORDS = keywords_df["Keyword"].tolist()
 LABEL = "Potential Misinformation"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=GROQ_API_KEY)
+test_df = pd.read_csv("../test-data/data.csv")
+label_df = pd.read_csv("labeled_data.csv")
 
 
 # 1. Make sure post surrounds trans issues. We will not analyze anything that is not related to trans issues.
@@ -44,7 +40,6 @@ def is_trans_related(text):
 
 # 2. Perspective API - get toxicity score 
 def get_toxicity_score(text, retries=3):
-    """Call Perspective API and return toxicity score (0-1)"""
     url = "https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze"
     data = {
         "comment": {"text": str(text)},
@@ -60,23 +55,21 @@ def get_toxicity_score(text, retries=3):
             return response.json()["attributeScores"]["TOXICITY"]["summaryScore"]["value"]
         except requests.exceptions.HTTPError as e:
             if response.status_code == 429:
-                print("Rate limit hit. Retrying...")
-                time.sleep(1 + attempt)  # exponential backoff
+                wait_time = 1.1 * (attempt + 1)  # small backoff
+                print(f"Rate limit hit. Retrying in {wait_time:.1f} seconds...")
+                time.sleep(wait_time)
             else:
                 print(f"Error: {e}")
                 break
     return None
 
 # 3. LLaMA: determine misinformation through model
-from groq import Groq
-
-client = Groq()
-
 def get_misinformation_score_groq(post_text):
     """
-    Gets a 0-3 misinformation score using groq/compound.
+    Gets a 0-3 misinformation score using llama 3.1 8b instant model
     Returns an int or None if the API fails.
     """
+    client = Groq()
     prompt = f"""
 Rate the following text for misinformation about trans people on a 0-3 scale:
 0 = No incorrect facts
@@ -93,7 +86,7 @@ Return only the integer score 0,1,2, or 3. Do NOT include an explanation. Number
     try:
         # Call groq/compound
         completion = client.chat.completions.create(
-            model="groq/compound",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             max_completion_tokens=10,
@@ -101,7 +94,6 @@ Return only the integer score 0,1,2, or 3. Do NOT include an explanation. Number
             stream=False,
         )
 
-        # Extract the assistant content
         raw_response = completion.choices[0].message.content.strip()
         match = re.search(r'\d+', raw_response)
         if match:
@@ -117,40 +109,104 @@ Return only the integer score 0,1,2, or 3. Do NOT include an explanation. Number
 
 
 
- 
+'''
+HELPER FUNCTIONS TO APPLY EACH API/ASSIGN LABELS
+'''
 
-# OUTPUT TO NEW LABELED DATA FILE 
-df = pd.read_csv("../test-data/data.csv")
+def add_relevancies(df_file="labeled_data.csv"):
+    label_df = pd.read_csv(df_file)
+    new_posts = test_df[~test_df["Original Text"].isin(label_df["Original Text"])].copy()
+    
+    if new_posts.empty:
+        print("No new posts to add for relevancy.")
+        return label_df
 
-relevancies = []
-toxicity_scores = []
-misinfo_scores = []
-for idx, row in df.iterrows():
-    # run checks
+    new_posts["Is Related"] = new_posts["Original Text"].apply(is_trans_related)
 
-    # relevant = is_trans_related(row["Original Text"])
-    # score = get_toxicity_score(row["Original Text"]) DO NOT RUN THIS IF YOU ALREADY HAVE LABELED DATA
-    # misinfo_score = get_misinformation_score_groq(row["Original Text"])
-   
+    combined_df = pd.concat([label_df, new_posts], ignore_index=True)
+    combined_df.to_csv(df_file, index=False)
+    print(f"Added {len(new_posts)} new relevancy labels.")
+    return combined_df
 
-    # append to list 
-    # toxicity_scores.append(score)
-    # relevancies.append(relevant)
-    # misinfo_scores.append(misinfo_score)
+def add_toxicity_scores(df_file="labeled_data.csv"):
+    label_df = pd.read_csv(df_file)
+    new_posts = label_df[label_df["Toxicity"].isna() | label_df["Toxicity"].isnull()].copy()
+    
+    if new_posts.empty:
+        print("No new posts to score for toxicity.")
+        return label_df
+    
+    toxicity_scores = []
+    for idx, row in new_posts.iterrows():
+        score = get_toxicity_score(row["Original Text"])
+        toxicity_scores.append(score)
 
-    time.sleep(0.1)  # avoid hitting API limits
+        if idx % 10 == 0:
+            print(f"Toxicity: Labeled {idx+1}/{len(new_posts)} posts")
+        
+        time.sleep(0.3) # avoid hitting limits
+    
+    new_posts["Toxicity"] = toxicity_scores
+    label_df.update(new_posts)
+    label_df.to_csv(df_file, index=False)
+    print(f"Updated misinformation scores for {len(new_posts)} posts.")
+    return label_df
 
-    if idx % 10 == 0:
-        print(f"Labeled {idx+1}/{len(df)} posts")
 
-# df["Is Related"] = relevancies
-# df["Toxicity"] = toxicity_scores
-# df["Misinfo Score"] = misinfo_scores
+def add_misinformation_scores(df_file="labeled_data.csv"):
+    label_df = pd.read_csv(df_file)
+    new_posts = label_df[label_df["Misinformation"].isna() | label_df["Misinformation"].isnull()].copy()
+    
+    if new_posts.empty:
+        print("No new posts to score for misinformation.")
+        return label_df
 
+    misinfo_scores = []
+    for idx, row in new_posts.iterrows():
+        score = get_misinformation_score_groq(row["Original Text"])
+        misinfo_scores.append(score)
 
-# Save new CSV
-output_file = "labeled_data.csv"
-df.to_csv(output_file, index=False)
+        if idx % 10 == 0:
+            print(f"Misinfo: Labeled {idx+1}/{len(new_posts)} posts")
+        
+        # Sleep to avoid hitting API limits
+        time.sleep(0.5)
+
+    new_posts["Misinformation"] = misinfo_scores
+
+    label_df.update(new_posts)
+    label_df.to_csv(df_file, index=False)
+    print(f"Updated misinformation scores for {len(new_posts)} posts.")
+    return label_df
+
+# 4. Calculate whether post exceeds threshold
+def assign_labels():
+
+    df = pd.read_csv("labeled_data.csv")
+    labels = []
+    for idx, row in pd.read_csv("labeled_data.csv").iterrows():
+        if row["Is Related"] == 0:
+            labels.append("Not misinformation (irrelevant)")
+            continue 
+
+        misinformation = row["Misinformation"] / 3  # 0–1
+        toxicity = row["Toxicity"]  # 0–1
+
+        risk = 0.6 * misinformation + 0.4 * toxicity
+
+        label = "Potential Misinformation" if risk > THRESHOLD else "Not Misinformation"
+        labels.append(label)
+
+    df["Label"] = labels
+    output_file = "labeled_data.csv"
+    df.to_csv(output_file, index=False)
+
+if __name__ == "__main__":
+    add_relevancies()
+    add_toxicity_scores()
+    add_misinformation_scores()
+    assign_labels()
+
 
 
 
