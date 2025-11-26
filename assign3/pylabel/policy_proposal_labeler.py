@@ -13,6 +13,11 @@ import pandas as pd
 from atproto import Client
 from dotenv import load_dotenv
 import requests
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+from groq import Groq
+import json
+import re
 
 load_dotenv()
 
@@ -23,6 +28,9 @@ keyword_file = "../labeler-inputs/input-data-keywords.csv"
 keywords_df = pd.read_csv(keyword_file, header=None, names=["Keyword"])
 KEYWORDS = keywords_df["Keyword"].tolist()
 LABEL = "Potential Misinformation"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+client = Groq(api_key=GROQ_API_KEY)
+
 
 # 1. Make sure post surrounds trans issues. We will not analyze anything that is not related to trans issues.
 # use simple keyword filtering similar to getting trans related data in data_scraper.py
@@ -59,27 +67,85 @@ def get_toxicity_score(text, retries=3):
                 break
     return None
 
+# 3. LLaMA: determine misinformation through model
+from groq import Groq
+
+client = Groq()
+
+def get_misinformation_score_groq(post_text):
+    """
+    Gets a 0-3 misinformation score using groq/compound.
+    Returns an int or None if the API fails.
+    """
+    prompt = f"""
+Rate the following text for misinformation about trans people on a 0-3 scale:
+0 = No incorrect facts
+1 = Minor incorrect facts
+2 = Some incorrect facts
+3 = Major incorrect facts
+Return only the integer score.
+
+Text: "{post_text}"
+
+Return only the integer score 0,1,2, or 3. Do NOT include an explanation. Number only.
+"""
+
+    try:
+        # Call groq/compound
+        completion = client.chat.completions.create(
+            model="groq/compound",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_completion_tokens=10,
+            top_p=1,
+            stream=False,
+        )
+
+        # Extract the assistant content
+        raw_response = completion.choices[0].message.content.strip()
+        match = re.search(r'\d+', raw_response)
+        if match:
+            score = int(match.group())
+        else:
+            score = None  # no valid number found
+        
+        return score
+
+    except Exception as e:
+        print(f"Error calling Groq API: {e}")
+        return None
+
+
+
+ 
 
 # OUTPUT TO NEW LABELED DATA FILE 
 df = pd.read_csv("../test-data/data.csv")
 
 relevancies = []
 toxicity_scores = []
+misinfo_scores = []
 for idx, row in df.iterrows():
     # run checks
-    relevant = is_trans_related(row["Original Text"])
+
+    # relevant = is_trans_related(row["Original Text"])
     # score = get_toxicity_score(row["Original Text"]) DO NOT RUN THIS IF YOU ALREADY HAVE LABELED DATA
+    # misinfo_score = get_misinformation_score_groq(row["Original Text"])
+   
 
     # append to list 
-    toxicity_scores.append(score)
-    relevancies.append(relevant)
+    # toxicity_scores.append(score)
+    # relevancies.append(relevant)
+    # misinfo_scores.append(misinfo_score)
+
     time.sleep(0.1)  # avoid hitting API limits
 
     if idx % 10 == 0:
         print(f"Labeled {idx+1}/{len(df)} posts")
 
-df["Is Related"] = relevancies
-df["Toxicity"] = toxicity_scores
+# df["Is Related"] = relevancies
+# df["Toxicity"] = toxicity_scores
+# df["Misinfo Score"] = misinfo_scores
 
 
 # Save new CSV
