@@ -56,4 +56,3 @@ For the labeler, the output labels will all be part of `pylabel/labeled_data.csv
 To check the label given by the labeler, use the Label column. To check the actual label assessed by us, use the Class column.
 
 The precision, recall, and accuracy are also all calculated and printed to the console.
-```
