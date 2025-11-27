@@ -201,17 +201,48 @@ def assign_labels():
     output_file = "labeled_data.csv"
     df.to_csv(output_file, index=False)
 
+# 5. Assess metrics such as precision, recall, and accuracy. How well did our labeller do compared to the input labels we assigned?
+def assess_metrics():
+    # true positive, true negative, false positive, false negative
+    tp = 0
+    tn = 0
+    fp = 0 
+    fn = 0 
+    for (idx1, row1), (idx2, row2) in zip(pd.read_csv("labeled_data.csv").iterrows(), pd.read_csv("../test-data/data.csv").iterrows()):
+        test_label = row1["Label"]
+        actual_label = row2["Class"]
+
+        if test_label == "Potential Misinformation" and actual_label == "Potential Misinformation":
+            tp += 1
+        elif test_label != "Potential Misinformation" and actual_label != "Potential Misinformation":
+            tn += 1
+        elif test_label == "Potential Misinformation" and actual_label != "Potential Misinformation":
+            # labeler thought it was misinfo when it actually wasn't
+            # this is a false positive
+            fp += 1
+        else:
+            # labeler thought it wasn't misinfo but it was
+            # false negative 
+            fn += 1
+    print("Precision: ", tp / (tp + fp))
+    print("Recall: ", tp / (tp + fn))
+    print("Accuracy: ", (tp + tn) / (tp + tn + fp + fn))
+        
+        
+
+
+
+
+    
+
+
+    
+
+    
+
 if __name__ == "__main__":
-    add_relevancies()
-    add_toxicity_scores()
-    add_misinformation_scores()
-    assign_labels()
-
-
-
-
-
-
-
-
-
+    # add_relevancies()
+    # add_toxicity_scores()
+    # add_misinformation_scores()
+    # assign_labels()
+    assess_metrics()
