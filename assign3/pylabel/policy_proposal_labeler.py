@@ -201,7 +201,7 @@ def assign_labels():
 
         risk = 0.7 * misinformation + 0.3 * toxicity
 
-        label = "Potential Misinformation" if risk > THRESHOLD else "Not Misinformation"
+        label = "Potential Misinformation" if risk > THRESHOLD else "Nothing detected"
         labels.append(label)
 
     df["Label"] = labels
@@ -226,27 +226,13 @@ def assess_metrics():
             tn += 1
         elif test_label == "Potential Misinformation" and actual_label != "Potential Misinformation":
             # labeler thought it was misinfo when it actually wasn't
-            # this is a false positive
             fp += 1
         else:
             # labeler thought it wasn't misinfo but it was
-            # false negative 
             fn += 1
     print("Precision: ", tp / (tp + fp))
     print("Recall: ", tp / (tp + fn))
     print("Accuracy: ", (tp + tn) / (tp + tn + fp + fn))
-        
-        
-
-
-
-
-    
-
-
-    
-
-    
 
 if __name__ == "__main__":
     add_relevancies()
