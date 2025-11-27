@@ -33,11 +33,11 @@ The file structure is as follows.
         - `data.csv`: Original file with all our classifications for input posts, based on our rubric.
 
 ## Test
-- To run all scripts, please ensure you have a `.env` file in `pylabel/` with the appropriate information listed in `pylabel/.env-TEMPLATE` and fill in all necessary values listed
-USERNAME is your Bluesky Platform Account Username
-PW is your Bluesky Platform Account Password
-PERSPECTIVE_API_KEY is your Perspective API Key
-GROQ_API_KEY is your Groq api key
+- To run all scripts, please ensure you have a `.env` file in `pylabel/` with the appropriate information listed in `pylabel/.env-TEMPLATE` and fill in all necessary values listed: 
+USERNAME is your Bluesky Platform Account Username, 
+PW is your Bluesky Platform Account Password, 
+PERSPECTIVE_API_KEY is your Perspective API Key, 
+GROQ_API_KEY is your Groq api key.
 
 - and install all dependencies with 
 ```
