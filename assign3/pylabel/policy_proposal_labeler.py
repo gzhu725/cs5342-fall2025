@@ -193,7 +193,7 @@ def assign_labels():
     labels = []
     for idx, row in pd.read_csv("labeled_data.csv").iterrows():
         if row["Is Related"] == 0:
-            labels.append("Not misinformation (irrelevant)")
+            labels.append("Not relevant")
             continue 
 
         misinformation = row["Misinformation"] / 3  # 0–1
@@ -230,6 +230,8 @@ def assess_metrics():
         else:
             # labeler thought it wasn't misinfo but it was
             fn += 1
+    print("False Positives: ", fp)
+    print("False Negatives: ", fn)
     print("Precision: ", tp / (tp + fp))
     print("Recall: ", tp / (tp + fn))
     print("Accuracy: ", (tp + tn) / (tp + tn + fp + fn))
