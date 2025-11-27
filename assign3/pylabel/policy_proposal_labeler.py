@@ -17,7 +17,7 @@ load_dotenv()
 
 # GLOBAL VARS 
 PERSPECTIVE_API_KEY = os.getenv("PERSPECTIVE_API_KEY")
-THRESHOLD = 0.6 # for now 
+THRESHOLD = 0.5
 keyword_file = "../labeler-inputs/input-data-keywords.csv"
 keywords_df = pd.read_csv(keyword_file, header=None, names=["Keyword"])
 KEYWORDS = keywords_df["Keyword"].tolist()
@@ -72,15 +72,22 @@ def get_misinformation_score_groq(post_text):
     client = Groq()
     prompt = f"""
 Rate the following text for misinformation about trans people on a 0-3 scale:
+
 0 = No incorrect facts
 1 = Minor incorrect facts
 2 = Some incorrect facts
 3 = Major incorrect facts
-Return only the integer score.
+
+Label as potential misinformation if the text contains any of these:
+- False/misleading biological claims about sex/gender
+- Claims framing trans identity as a mental disorder or delusion
+- Misuse of science to delegitimize trans identities
+- Harmful or unverified causal claims
+- Broad biological/scientific claims lacking factual support
 
 Text: "{post_text}"
 
-Return only the integer score 0,1,2, or 3. Do NOT include an explanation. Number only.
+Return only the integer 0,1,2,3. No explanation.
 """
 
     try:
@@ -192,7 +199,7 @@ def assign_labels():
         misinformation = row["Misinformation"] / 3  # 0–1
         toxicity = row["Toxicity"]  # 0–1
 
-        risk = 0.6 * misinformation + 0.4 * toxicity
+        risk = 0.7 * misinformation + 0.3 * toxicity
 
         label = "Potential Misinformation" if risk > THRESHOLD else "Not Misinformation"
         labels.append(label)
@@ -211,6 +218,7 @@ def assess_metrics():
     for (idx1, row1), (idx2, row2) in zip(pd.read_csv("labeled_data.csv").iterrows(), pd.read_csv("../test-data/data.csv").iterrows()):
         test_label = row1["Label"]
         actual_label = row2["Class"]
+        help = 0
 
         if test_label == "Potential Misinformation" and actual_label == "Potential Misinformation":
             tp += 1
@@ -241,8 +249,8 @@ def assess_metrics():
     
 
 if __name__ == "__main__":
-    # add_relevancies()
-    # add_toxicity_scores()
-    # add_misinformation_scores()
-    # assign_labels()
+    add_relevancies()
+    add_toxicity_scores()
+    add_misinformation_scores()
+    assign_labels()
     assess_metrics()
